@@ -21,7 +21,7 @@ import java.util.List;
 public class DispatcherServlet extends HttpServlet {
     private static final Logger logger = LoggerFactory.getLogger(DispatcherServlet.class);
 
-    private RequestMappingHandlerMapping handlerMapping;
+    private List<HandlerMapping> handlerMappings;
 
     private List<HandlerAdapter> handlerAdapters;
 
@@ -29,16 +29,27 @@ public class DispatcherServlet extends HttpServlet {
 
     @Override
     public void init() {
-        handlerMapping = new RequestMappingHandlerMapping();
-        handlerMapping.init();
+        RequestMappingHandlerMapping rmhm = new RequestMappingHandlerMapping();
+        rmhm.init();
 
-        handlerAdapters = Collections.singletonList(new SimpleControllerHandlerAdapter());
+        AnnotationHandlerMapping ahm = new AnnotationHandlerMapping("com.sangkon");
+        ahm.initialize();
+
+        handlerMappings = List.of(rmhm, ahm);
+        handlerAdapters = List.of(new SimpleControllerHandlerAdapter(), new AnnotationHandlerAdapter());
         viewResolvers = Collections.singletonList(new JspViewResolver());
     }
 
     @Override
     protected void service(HttpServletRequest request, HttpServletResponse response) throws ServletException {
-        Controller controller = handlerMapping.findHandler(new HandlerKey(request.getRequestURI(), RequestMethod.valueOf(request.getMethod())));
+        String requestURI = request.getRequestURI();
+        RequestMethod requestMethod = RequestMethod.valueOf(request.getMethod());
+
+        Object controller = handlerMappings.stream()
+                .filter(hm -> hm.findHandler(new HandlerKey(requestURI, requestMethod)) != null)
+                .map(hm -> hm.findHandler(new HandlerKey(requestURI, requestMethod)))
+                .findFirst()
+                .orElseThrow(() -> new ServletException("No handler for [" + requestMethod + ", " + requestURI + "]"));
 
         try {
             HandlerAdapter handlerAdapter = handlerAdapters.stream()
